@@ -1,0 +1,536 @@
+import React, { useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+    ArrowLeft,
+    IndianRupee,
+    Fuel,
+    Wrench,
+    Shield,
+    Calendar,
+    TrendingDown,
+    Info,
+    ChevronDown,
+    Sparkles,
+    Download,
+    RefreshCw,
+    Bike,
+    Zap,
+} from "lucide-react";
+import Navbar from "../components/Navbar";
+
+// =====================================================
+// CONSTANTS & HELPERS
+// =====================================================
+const inr = (n) => `₹${Math.round(Number(n || 0)).toLocaleString("en-IN")}`;
+const pct = (n) => `${Number(n || 0).toFixed(1)}%`;
+
+const FUEL_PRICE_PETROL = 105;   // ₹/litre (national average)
+const FUEL_PRICE_ELEC   = 8;     // ₹/kWh (home charging)
+
+// Insurance as % of ex-showroom price (IDV-based approximation)
+const INSURANCE_RATES = {
+    year1: 0.032,
+    year2: 0.026,
+    year3: 0.024,
+    year4: 0.022,
+    year5: 0.020,
+};
+
+// Depreciation rates (Indian market)
+const DEPRECIATION = {
+    year1: 0.25,
+    year2: 0.18,
+    year3: 0.15,
+    year4: 0.12,
+    year5: 0.10,
+};
+
+// Registration & road tax estimate (% of ex-showroom for private)
+const REGISTRATION_PCT = 0.08;
+// On-road charges multiplier
+const GST_PCT = 0.28;
+
+const MAINTENANCE_PRESETS = {
+    entry:   { annual: 4500,  desc: "Simple commuters, single cylinder" },
+    mid:     { annual: 8000,  desc: "150–350cc bikes" },
+    premium: { annual: 15000, desc: "400cc+ premium & performance bikes" },
+    ev:      { annual: 2500,  desc: "Electric (minimal mechanical maintenance)" },
+};
+
+// =====================================================
+// COST SECTION CARD
+// =====================================================
+function CostCard({ icon, label, value, sub, accent = false }) {
+    return (
+        <div className={`rounded-2xl border p-4 ${accent
+            ? "border-orange-500/30 bg-orange-500/5"
+            : "border-white/8 bg-white/[0.02]"}`
+        }>
+            <div className="flex items-center gap-2 mb-2">
+                <span className={`${accent ? "text-orange-400" : "text-zinc-400"}`}>{icon}</span>
+                <span className="text-xs text-zinc-500 uppercase tracking-wide">{label}</span>
+            </div>
+            <p className={`text-xl font-black ${accent ? "text-orange-400" : "text-white"}`}>{value}</p>
+            {sub && <p className="text-xs text-zinc-600 mt-0.5">{sub}</p>}
+        </div>
+    );
+}
+
+// =====================================================
+// INPUT FIELD
+// =====================================================
+function Field({ label, hint, children }) {
+    return (
+        <div>
+            <label className="block text-sm font-semibold text-zinc-300 mb-1.5">{label}</label>
+            {hint && <p className="text-xs text-zinc-600 mb-2">{hint}</p>}
+            {children}
+        </div>
+    );
+}
+
+const inputCls = "w-full bg-[#111] border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 transition";
+const selectCls = inputCls + " appearance-none";
+
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
+export default function OwnershipCost() {
+    const navigate = useNavigate();
+
+    const [form, setForm] = useState({
+        exShowroom:    150000,
+        fuelType:      "petrol",
+        mileage:       45,        // km/l for petrol; range km for EV
+        batteryKwh:    0,         // for EV
+        dailyKm:       40,
+        ownership:     3,         // years
+        maintenanceTier: "mid",
+        loanPct:       0,         // % financed
+        loanRatePA:    10,        // % p.a.
+        loanYears:     3,
+        emiDownPct:    20,
+    });
+
+    const set = useCallback((key, val) => setForm((f) => ({ ...f, [key]: val })), []);
+
+    const isEV = form.fuelType === "electric";
+
+    // =====================================================
+    // CALCULATIONS (memoized)
+    // =====================================================
+    const calc = useMemo(() => {
+        const ex = Number(form.exShowroom) || 0;
+        const years = Math.min(Math.max(Number(form.ownership) || 1, 1), 5);
+        const dailyKm = Number(form.dailyKm) || 0;
+        const annualKm = dailyKm * 365;
+
+        // On-road price
+        const gst = ex * GST_PCT;
+        const registration = ex * REGISTRATION_PCT;
+        const onRoad = ex + gst + registration;
+
+        // Fuel/energy cost per year
+        let annualFuel = 0;
+        if (isEV) {
+            const kwh = Number(form.batteryKwh) || 3;
+            const rangePerCharge = Number(form.mileage) || 100; // km range
+            const chargesPerYear = annualKm / rangePerCharge;
+            annualFuel = chargesPerYear * kwh * FUEL_PRICE_ELEC;
+        } else {
+            const mileage = Number(form.mileage) || 1;
+            const litresPerYear = annualKm / mileage;
+            annualFuel = litresPerYear * FUEL_PRICE_PETROL;
+        }
+
+        // Maintenance per year
+        const maintenanceTier = MAINTENANCE_PRESETS[isEV ? "ev" : form.maintenanceTier];
+        const annualMaintenance = maintenanceTier.annual;
+
+        // Insurance per year (calculated by year for accuracy)
+        const insuranceByYear = [];
+        for (let y = 1; y <= years; y++) {
+            const rate = INSURANCE_RATES[`year${y}`] || INSURANCE_RATES.year5;
+            // IDV reduces each year
+            const depKey = `year${y}`;
+            const dep = DEPRECIATION[depKey] || DEPRECIATION.year5;
+            const idv = ex * (1 - dep);
+            insuranceByYear.push(idv * rate);
+        }
+        const totalInsurance = insuranceByYear.reduce((s, v) => s + v, 0);
+        const avgAnnualInsurance = totalInsurance / years;
+
+        // Loan EMI
+        let totalLoanInterest = 0;
+        let monthlyEmi = 0;
+        if (form.loanPct > 0) {
+            const principal = onRoad * (Number(form.loanPct) / 100);
+            const r = (Number(form.loanRatePA) || 10) / 100 / 12;
+            const n = (Number(form.loanYears) || 3) * 12;
+            if (r > 0) {
+                monthlyEmi = principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+            } else {
+                monthlyEmi = principal / n;
+            }
+            totalLoanInterest = monthlyEmi * n - principal;
+        }
+
+        // Depreciation (residual value)
+        const depKey = `year${years}`;
+        const totalDepreciationPct = DEPRECIATION[depKey] || DEPRECIATION.year5;
+        let cumulativeDep = 1;
+        for (let y = 1; y <= years; y++) {
+            cumulativeDep *= (1 - (DEPRECIATION[`year${y}`] || 0.10));
+        }
+        const residualValue = ex * cumulativeDep;
+        const valueDropped = ex - residualValue;
+
+        // Totals
+        const totalFuel = annualFuel * years;
+        const totalMaintenance = annualMaintenance * years;
+        const totalOwnershipCost = onRoad + totalFuel + totalInsurance + totalMaintenance + totalLoanInterest;
+        const annualTotalCost = totalOwnershipCost / years;
+        const monthlyCost = annualTotalCost / 12;
+        const costPerKm = dailyKm > 0 ? (annualTotalCost / annualKm) : 0;
+
+        return {
+            ex, onRoad, gst, registration,
+            annualFuel, totalFuel,
+            annualMaintenance, totalMaintenance,
+            avgAnnualInsurance, totalInsurance,
+            monthlyEmi, totalLoanInterest,
+            residualValue, valueDropped,
+            totalOwnershipCost, annualTotalCost, monthlyCost,
+            costPerKm, annualKm, years,
+        };
+    }, [form, isEV]);
+
+    const breakdown = [
+        { label: "On-road Price",         value: inr(calc.onRoad),              pct: calc.onRoad / calc.totalOwnershipCost * 100 },
+        { label: `Fuel / Energy (${calc.years}y)`, value: inr(calc.totalFuel), pct: calc.totalFuel / calc.totalOwnershipCost * 100 },
+        { label: `Insurance (${calc.years}y)`,     value: inr(calc.totalInsurance), pct: calc.totalInsurance / calc.totalOwnershipCost * 100 },
+        { label: `Maintenance (${calc.years}y)`,   value: inr(calc.totalMaintenance), pct: calc.totalMaintenance / calc.totalOwnershipCost * 100 },
+        { label: "Loan Interest",         value: inr(calc.totalLoanInterest),   pct: calc.totalLoanInterest / calc.totalOwnershipCost * 100 },
+    ].filter((r) => !r.value.includes("₹0"));
+
+    const askMotoMind = () => {
+        const prompt = `I've calculated the ownership cost of a motorcycle with ex-showroom price of ${inr(form.exShowroom)}. Over ${calc.years} years with ${form.dailyKm} km/day, the total cost of ownership comes to approximately ${inr(calc.totalOwnershipCost)} (about ${inr(calc.monthlyCost)}/month). This includes fuel (${inr(calc.totalFuel)}), insurance (${inr(calc.totalInsurance)}), and maintenance (${inr(calc.totalMaintenance)}). Can you help me understand if this is reasonable and suggest ways to reduce these costs?`;
+        navigate("/ai-advisor", { state: { prefill: prompt } });
+    };
+
+    // =====================================================
+    // RENDER
+    // =====================================================
+    return (
+        <div className="min-h-screen bg-[#070707] text-white">
+            <Navbar />
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10">
+
+                {/* Header */}
+                <div className="mb-8">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-white transition mb-5"
+                    >
+                        <ArrowLeft size={17} />
+                        Back
+                    </button>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold mb-4">
+                        <IndianRupee size={13} />
+                        Ownership Cost Calculator
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-black">Total Cost of Ownership</h1>
+                    <p className="text-zinc-400 mt-2 max-w-xl">
+                        Understand what a motorcycle really costs over its lifetime — beyond just the sticker price.
+                        All figures are estimates for planning purposes.
+                    </p>
+                </div>
+
+                <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8">
+
+                    {/* LEFT — Input Form */}
+                    <div className="space-y-5">
+
+                        {/* Bike Details */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
+                            <h3 className="font-black text-base">Motorcycle Details</h3>
+
+                            <Field label="Ex-showroom Price (₹)" hint="Price before GST, registration, and insurance">
+                                <input
+                                    id="ex-showroom-price"
+                                    type="number"
+                                    value={form.exShowroom}
+                                    onChange={(e) => set("exShowroom", e.target.value)}
+                                    className={inputCls}
+                                    min={0}
+                                    step={5000}
+                                />
+                            </Field>
+
+                            <Field label="Fuel Type">
+                                <select
+                                    id="fuel-type"
+                                    value={form.fuelType}
+                                    onChange={(e) => set("fuelType", e.target.value)}
+                                    className={selectCls}
+                                >
+                                    <option value="petrol">Petrol</option>
+                                    <option value="electric">Electric</option>
+                                </select>
+                            </Field>
+
+                            {isEV ? (
+                                <>
+                                    <Field label="Battery Capacity (kWh)" hint="From the spec sheet">
+                                        <input
+                                            id="battery-kwh"
+                                            type="number"
+                                            value={form.batteryKwh}
+                                            onChange={(e) => set("batteryKwh", e.target.value)}
+                                            className={inputCls}
+                                            min={0}
+                                            step={0.5}
+                                        />
+                                    </Field>
+                                    <Field label="Range per Charge (km)" hint="Manufacturer claimed or real-world">
+                                        <input
+                                            id="ev-range"
+                                            type="number"
+                                            value={form.mileage}
+                                            onChange={(e) => set("mileage", e.target.value)}
+                                            className={inputCls}
+                                            min={1}
+                                        />
+                                    </Field>
+                                </>
+                            ) : (
+                                <Field label="Fuel Efficiency (km/l)" hint="Real-world, not claimed mileage">
+                                    <input
+                                        id="mileage"
+                                        type="number"
+                                        value={form.mileage}
+                                        onChange={(e) => set("mileage", e.target.value)}
+                                        className={inputCls}
+                                        min={1}
+                                    />
+                                </Field>
+                            )}
+                        </div>
+
+                        {/* Usage */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
+                            <h3 className="font-black text-base">Usage & Ownership</h3>
+
+                            <Field label="Daily Distance (km)" hint="Average km you ride per day">
+                                <input
+                                    id="daily-km"
+                                    type="number"
+                                    value={form.dailyKm}
+                                    onChange={(e) => set("dailyKm", e.target.value)}
+                                    className={inputCls}
+                                    min={1}
+                                />
+                            </Field>
+
+                            <Field label="Years of Ownership">
+                                <select
+                                    id="ownership-years"
+                                    value={form.ownership}
+                                    onChange={(e) => set("ownership", e.target.value)}
+                                    className={selectCls}
+                                >
+                                    {[1, 2, 3, 4, 5].map((y) => (
+                                        <option key={y} value={y}>{y} Year{y > 1 ? "s" : ""}</option>
+                                    ))}
+                                </select>
+                            </Field>
+
+                            {!isEV && (
+                                <Field label="Maintenance Category">
+                                    <select
+                                        id="maintenance-tier"
+                                        value={form.maintenanceTier}
+                                        onChange={(e) => set("maintenanceTier", e.target.value)}
+                                        className={selectCls}
+                                    >
+                                        {Object.entries(MAINTENANCE_PRESETS).filter(([k]) => k !== "ev").map(([k, v]) => (
+                                            <option key={k} value={k}>
+                                                {k.charAt(0).toUpperCase() + k.slice(1)} — {v.desc} (~{inr(v.annual)}/yr)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </Field>
+                            )}
+                        </div>
+
+                        {/* Loan */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
+                            <h3 className="font-black text-base">Financing (Optional)</h3>
+
+                            <Field label="Loan Amount (% of on-road)" hint="Set to 0 for full cash purchase">
+                                <input
+                                    id="loan-pct"
+                                    type="number"
+                                    value={form.loanPct}
+                                    onChange={(e) => set("loanPct", e.target.value)}
+                                    className={inputCls}
+                                    min={0}
+                                    max={100}
+                                />
+                            </Field>
+
+                            {form.loanPct > 0 && (
+                                <>
+                                    <Field label="Interest Rate (% p.a.)">
+                                        <input
+                                            id="loan-rate"
+                                            type="number"
+                                            value={form.loanRatePA}
+                                            onChange={(e) => set("loanRatePA", e.target.value)}
+                                            className={inputCls}
+                                            min={1}
+                                            step={0.5}
+                                        />
+                                    </Field>
+                                    <Field label="Loan Tenure (years)">
+                                        <select
+                                            id="loan-years"
+                                            value={form.loanYears}
+                                            onChange={(e) => set("loanYears", e.target.value)}
+                                            className={selectCls}
+                                        >
+                                            {[1, 2, 3, 4, 5].map((y) => (
+                                                <option key={y} value={y}>{y} Year{y > 1 ? "s" : ""}</option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="flex items-start gap-2 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-blue-300">
+                            <Info size={14} className="shrink-0 mt-0.5" />
+                            <span>
+                                All figures are estimates. Petrol price assumed ₹{FUEL_PRICE_PETROL}/litre.
+                                Electricity assumed ₹{FUEL_PRICE_EV}/kWh. Insurance uses IDV-based approximation.
+                                Actual costs may vary.
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* RIGHT — Results */}
+                    <div className="space-y-5">
+
+                        {/* Top cost numbers */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <CostCard
+                                icon={<IndianRupee size={18} />}
+                                label={`Total ${calc.years}yr Cost`}
+                                value={inr(calc.totalOwnershipCost)}
+                                sub="Including all costs"
+                                accent
+                            />
+                            <CostCard
+                                icon={<Calendar size={18} />}
+                                label="Monthly Cost"
+                                value={inr(calc.monthlyCost)}
+                                sub="Average per month"
+                            />
+                            <CostCard
+                                icon={<Bike size={18} />}
+                                label="Cost Per Km"
+                                value={calc.costPerKm > 0 ? `₹${calc.costPerKm.toFixed(2)}` : "—"}
+                                sub="All-inclusive"
+                            />
+                            <CostCard
+                                icon={<TrendingDown size={18} />}
+                                label="Residual Value"
+                                value={inr(calc.residualValue)}
+                                sub={`After ${calc.years} yr`}
+                            />
+                        </div>
+
+                        {/* EMI */}
+                        {form.loanPct > 0 && calc.monthlyEmi > 0 && (
+                            <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
+                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wide mb-3">Loan EMI</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-3xl font-black">{inr(calc.monthlyEmi)}</p>
+                                    <span className="text-sm text-zinc-500">/month</span>
+                                </div>
+                                <p className="text-xs text-zinc-500 mt-1">
+                                    Total interest paid: {inr(calc.totalLoanInterest)} over {form.loanYears} years
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Breakdown */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+                            <h3 className="font-black text-base mb-4">Cost Breakdown</h3>
+                            <div className="space-y-3">
+                                {breakdown.map((item) => (
+                                    <div key={item.label}>
+                                        <div className="flex items-center justify-between text-sm mb-1">
+                                            <span className="text-zinc-400">{item.label}</span>
+                                            <span className="font-bold">{item.value}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-orange-500 rounded-full transition-all duration-500"
+                                                style={{ width: `${Math.min(item.pct || 0, 100)}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-zinc-600 mt-0.5">
+                                            {pct(item.pct)} of total
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Annual breakdown */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
+                            <h3 className="font-black text-base mb-4">Annual Running Costs</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                    <p className="text-xs text-zinc-500 mb-1">
+                                        {isEV ? "Electricity" : "Fuel"}
+                                    </p>
+                                    <p className="font-black">{inr(calc.annualFuel)}</p>
+                                    <p className="text-xs text-zinc-600">{Math.round(calc.annualKm).toLocaleString("en-IN")} km/yr</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                    <p className="text-xs text-zinc-500 mb-1">Insurance</p>
+                                    <p className="font-black">{inr(calc.avgAnnualInsurance)}</p>
+                                    <p className="text-xs text-zinc-600">IDV-based estimate</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                    <p className="text-xs text-zinc-500 mb-1">Maintenance</p>
+                                    <p className="font-black">{inr(calc.annualMaintenance)}</p>
+                                    <p className="text-xs text-zinc-600">Service + parts</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                    <p className="text-xs text-zinc-500 mb-1">Total Annual</p>
+                                    <p className="font-black">{inr(calc.annualTotalCost)}</p>
+                                    <p className="text-xs text-zinc-600">All costs combined</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Ask MotoMind */}
+                        <button
+                            onClick={askMotoMind}
+                            className="w-full flex items-center justify-center gap-2.5 py-4 rounded-2xl bg-orange-500 hover:bg-orange-600 text-black font-bold text-sm transition shadow-lg shadow-orange-500/20"
+                        >
+                            <Sparkles size={18} />
+                            Ask MotoMind to Analyse This
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Make fuel price constant available in JSX
+const FUEL_PRICE_EV = FUEL_PRICE_ELEC;
