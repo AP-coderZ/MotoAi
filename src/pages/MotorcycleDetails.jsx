@@ -29,6 +29,7 @@ import {
     MessageSquare,
     AlertCircle,
     UserCheck,
+    Calculator,
 } from "lucide-react";
 import {
     getMotorcycleReviews,
@@ -492,34 +493,58 @@ const MotorcycleDetails = () => {
                             </div>
                         )}
 
-                        {/* 5-YEAR OWNERSHIP COST CTA */}
-                        <div className="mt-8 rounded-2xl border border-white/10 bg-gradient-to-br from-orange-500/10 via-[#111] to-[#131313] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        {/* FINANCIAL & OWNERSHIP TOOLS CTA */}
+                        <div className="mt-8 rounded-2xl border border-white/10 bg-gradient-to-br from-orange-500/10 via-[#111] to-[#131313] p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
                             <div>
                                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-400">
-                                    <IndianRupee size={15} />
-                                    5-Year Cost of Ownership
+                                    <Calculator size={15} />
+                                    Finance & Cost Intelligence
                                 </div>
                                 <h3 className="mt-1 text-base font-black text-white">
-                                    Calculate EMI, Fuel, Insurance & Maintenance
+                                    Calculate Monthly EMI & 5-Year Ownership Costs
                                 </h3>
-                                <p className="text-xs text-zinc-400 mt-1">
-                                    Estimate monthly out-of-pocket costs and calculate depreciation before visiting the dealership.
+                                <p className="text-xs text-zinc-400 mt-1 max-w-xl">
+                                    Compare bank interest rates (SBI, HDFC, ICICI), customize down payments, and forecast lifetime fuel, insurance, and service expenses.
                                 </p>
+                                {bike.price > 0 && (
+                                    <div className="mt-2.5 inline-flex items-center gap-2 rounded-lg bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 text-xs text-orange-400 font-bold">
+                                        <span>Est. EMI starting from ~₹{Math.round((Number(bike.price) * 0.8 * (0.105 / 12) * Math.pow(1 + 0.105 / 12, 36)) / (Math.pow(1 + 0.105 / 12, 36) - 1)).toLocaleString("en-IN")}/mo</span>
+                                        <span className="text-[10px] text-zinc-500 font-normal">(80% loan · 3 yrs)</span>
+                                    </div>
+                                )}
                             </div>
-                            <button
-                                onClick={() =>
-                                    navigate(
-                                        `/ownership-cost?bike=${encodeURIComponent(
-                                            bike.name
-                                        )}&price=${bike.price}&mileage=${
-                                            bike.mileage || 40
-                                        }&category=${bike.category}`
-                                    )
-                                }
-                                className="shrink-0 rounded-xl bg-orange-500 px-5 py-3 text-xs font-bold text-black transition hover:bg-orange-400 shadow-md shadow-orange-500/10"
-                            >
-                                Calculate Ownership Cost →
-                            </button>
+                            <div className="flex flex-wrap sm:flex-nowrap gap-2.5 shrink-0">
+                                <button
+                                    onClick={() =>
+                                        navigate(
+                                            `/emi-calculator?bike=${encodeURIComponent(
+                                                bike.name
+                                            )}&price=${bike.price}&mileage=${
+                                                bike.mileage || 40
+                                            }&category=${bike.category}`
+                                        )
+                                    }
+                                    className="w-full sm:w-auto rounded-xl bg-orange-500 px-4 py-2.5 text-xs font-black text-black transition hover:bg-orange-400 shadow-md shadow-orange-500/10 flex items-center justify-center gap-1.5"
+                                >
+                                    <Calculator size={14} />
+                                    Calculate EMI
+                                </button>
+                                <button
+                                    onClick={() =>
+                                        navigate(
+                                            `/ownership-cost?bike=${encodeURIComponent(
+                                                bike.name
+                                            )}&price=${bike.price}&mileage=${
+                                                bike.mileage || 40
+                                            }&category=${bike.category}`
+                                        )
+                                    }
+                                    className="w-full sm:w-auto rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-white/10 flex items-center justify-center gap-1.5"
+                                >
+                                    <IndianRupee size={14} className="text-orange-400" />
+                                    Ownership Cost →
+                                </button>
+                            </div>
                         </div>
 
                         {/* CONTEXTUAL AD BANNER */}

@@ -12,6 +12,9 @@ import {
     Zap,
     Settings,
     Heart,
+    ChevronDown,
+    Calculator,
+    TrendingUp,
 } from "lucide-react";
 import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
@@ -33,6 +36,7 @@ export default function Navbar({ activeTab, showTokens = true }) {
     const [planStatus, setPlanStatus] = useState(null);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [calcDropdownOpen, setCalcDropdownOpen] = useState(false);
 
     const fetchStatus = useCallback(async () => {
         const token = localStorage.getItem("token");
@@ -111,15 +115,38 @@ export default function Navbar({ activeTab, showTokens = true }) {
         { label: "Home", path: "/" },
         { label: "Motorcycles", path: "/motorcycles" },
         { label: "AI Advisor", path: "/ai-advisor", icon: Sparkles },
-        { label: "AI Plan", path: "/ai-plan" },
         { label: "Compare", path: "/compare" },
         { label: "Bike Finder", path: "/smart-bike-finder" },
+        {
+            label: "Calculators",
+            path: "/emi-calculator",
+            icon: Calculator,
+            hasDropdown: true,
+            children: [
+                {
+                    label: "EMI Calculator",
+                    path: "/emi-calculator",
+                    desc: "Monthly loan installments & bank rates",
+                    icon: Calculator,
+                },
+                {
+                    label: "Ownership Cost",
+                    path: "/ownership-cost",
+                    desc: "5-year fuel, insurance & maintenance",
+                    icon: TrendingUp,
+                },
+            ],
+        },
         { label: "Learn", path: "/learn" },
     ];
 
     const isLinkActive = (path) => {
-        if (activeTab) return activeTab.toLowerCase() === path.replace("/", "").toLowerCase();
+        if (activeTab) {
+            if (activeTab.toLowerCase() === "calculators" && (path.includes("calculator") || path.includes("ownership"))) return true;
+            return activeTab.toLowerCase() === path.replace("/", "").toLowerCase();
+        }
         if (path === "/" && location.pathname === "/") return true;
+        if (path === "/emi-calculator" && (location.pathname === "/emi-calculator" || location.pathname === "/ownership-cost" || location.pathname === "/emi" || location.pathname === "/calculator")) return true;
         if (path !== "/" && location.pathname.startsWith(path)) return true;
         return false;
     };
@@ -133,9 +160,70 @@ export default function Navbar({ activeTab, showTokens = true }) {
                 </Link>
 
                 {/* Desktop Navigation Links */}
-                <div className="hidden items-center gap-8 md:flex">
-                    {navLinks.map(({ label, path, icon: Icon }) => {
+                <div className="hidden items-center gap-6 lg:gap-8 md:flex">
+                    {navLinks.map((item) => {
+                        const { label, path, icon: Icon, hasDropdown, children } = item;
                         const active = isLinkActive(path);
+
+                        if (hasDropdown) {
+                            return (
+                                <div
+                                    key={label}
+                                    className="relative"
+                                    onMouseEnter={() => setCalcDropdownOpen(true)}
+                                    onMouseLeave={() => setCalcDropdownOpen(false)}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => setCalcDropdownOpen(!calcDropdownOpen)}
+                                        className={`relative flex items-center gap-1.5 text-sm font-medium transition py-1 ${
+                                            active
+                                                ? "font-semibold text-white"
+                                                : "text-zinc-400 hover:text-white"
+                                        }`}
+                                    >
+                                        {Icon && <Icon size={14} className={active ? "text-orange-500" : "text-zinc-400"} />}
+                                        {label}
+                                        <ChevronDown size={13} className={`transition-transform duration-200 ${calcDropdownOpen ? "rotate-180 text-orange-500" : "text-zinc-500"}`} />
+                                        {active && (
+                                            <span className="absolute -bottom-3.5 left-0 h-0.5 w-full rounded-full bg-orange-500" />
+                                        )}
+                                    </button>
+
+                                    {calcDropdownOpen && (
+                                        <div className="absolute left-0 top-full pt-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                                            <div className="w-64 rounded-2xl border border-white/10 bg-[#0d0d0f]/95 p-2 shadow-2xl backdrop-blur-2xl">
+                                                {children.map((child) => {
+                                                    const ChildIcon = child.icon;
+                                                    const childActive = location.pathname === child.path;
+                                                    return (
+                                                        <Link
+                                                            key={child.label}
+                                                            to={child.path}
+                                                            onClick={() => setCalcDropdownOpen(false)}
+                                                            className={`flex items-start gap-3 rounded-xl p-2.5 transition ${
+                                                                childActive
+                                                                    ? "bg-orange-500/15 text-orange-400"
+                                                                    : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                                                            }`}
+                                                        >
+                                                            <div className={`mt-0.5 rounded-lg p-1.5 ${childActive ? "bg-orange-500/20 text-orange-400" : "bg-white/5 text-zinc-400"}`}>
+                                                                <ChildIcon size={16} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs font-bold">{child.label}</p>
+                                                                <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">{child.desc}</p>
+                                                            </div>
+                                                        </Link>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }
+
                         return (
                             <Link
                                 key={label}
@@ -352,20 +440,51 @@ export default function Navbar({ activeTab, showTokens = true }) {
                     )}
 
                     <div className="space-y-1">
-                        {navLinks.map(({ label, path }) => (
-                            <Link
-                                key={label}
-                                to={path}
-                                onClick={() => setMobileMenuOpen(false)}
-                                className={`block rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
-                                    isLinkActive(path)
-                                        ? "bg-orange-500 text-black font-bold"
-                                        : "text-zinc-300 hover:bg-white/5 hover:text-white"
-                                }`}
-                            >
-                                {label}
-                            </Link>
-                        ))}
+                        {navLinks.map((item) => {
+                            if (item.hasDropdown) {
+                                return (
+                                    <div key={item.label} className="pt-2 pb-1 border-t border-white/5 my-1">
+                                        <p className="px-3.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
+                                            {item.label} & Finance
+                                        </p>
+                                        {item.children.map((child) => {
+                                            const ChildIcon = child.icon;
+                                            const childActive = location.pathname === child.path;
+                                            return (
+                                                <Link
+                                                    key={child.label}
+                                                    to={child.path}
+                                                    onClick={() => setMobileMenuOpen(false)}
+                                                    className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2 text-sm font-medium transition ${
+                                                        childActive
+                                                            ? "bg-orange-500 text-black font-bold"
+                                                            : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                                                    }`}
+                                                >
+                                                    <ChildIcon size={15} className={childActive ? "text-black" : "text-orange-400"} />
+                                                    {child.label}
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <Link
+                                    key={item.label}
+                                    to={item.path}
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className={`block rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
+                                        isLinkActive(item.path)
+                                            ? "bg-orange-500 text-black font-bold"
+                                            : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                                    }`}
+                                >
+                                    {item.label}
+                                </Link>
+                            );
+                        })}
                     </div>
 
                     {!currentUser && (

@@ -20,7 +20,9 @@ import {
     FaTwitter,
     FaYoutube,
     FaLinkedin,
-    FaChargingStation
+    FaChargingStation,
+    FaCalculator,
+    FaChartLine
 } from "react-icons/fa";
 import Logo from "../components/Logo";
 import UserAvatar from "../components/UserAvatar";
@@ -91,6 +93,9 @@ const footerLinks = {
         ["AI Advisor", "/ai-advisor"],
         ["Compare Bikes", "/compare"],
         ["EMI Calculator", "/emi-calculator"],
+        ["Ownership Cost", "/ownership-cost"],
+        ["Smart Bike Finder", "/smart-bike-finder"],
+        ["Learning Hub", "/learn"],
         ["Book Test Ride", "/test-ride"]
     ],
     Company: [
@@ -482,13 +487,14 @@ function Homepage() {
                     <Logo onClick={() => go("/")} />
 
                     {/* DESKTOP MENU */}
-                    <div className="hidden md:flex items-center gap-8">
+                    <div className="hidden md:flex items-center gap-7">
                         {[
                             ["Home", "/"],
                             ["Motorcycles", "/motorcycles"],
                             ["AI Advisor", "/ai-advisor"],
-                            ["AI Plan", "/ai-plan"],
-                            ["Compare", "/compare"]
+                            ["Compare", "/compare"],
+                            ["EMI Calculator", "/emi-calculator"],
+                            ["Ownership Cost", "/ownership-cost"]
                         ].map(([label, path], index) => (
                             <button
                                 key={label}
@@ -637,8 +643,11 @@ function Homepage() {
                             ["Home", "/"],
                             ["Motorcycles", "/motorcycles"],
                             ["AI Advisor", "/ai-advisor"],
-                            ["AI Plan", "/ai-plan"],
                             ["Compare", "/compare"],
+                            ["EMI Calculator", "/emi-calculator"],
+                            ["Ownership Cost", "/ownership-cost"],
+                            ["Smart Bike Finder", "/smart-bike-finder"],
+                            ["Learning Hub", "/learn"],
                             ...(currentUser
                                 ? [["My Dashboard", dashboardPath]]
                                 : [["Login", "/login"], ["Get Started", "/register"]]),
@@ -1223,6 +1232,108 @@ function Homepage() {
                             </div>
                         )
                     )}
+                </div>
+            </section>
+
+            {/* ================= CALCULATORS & FINANCIAL TOOLS ================= */}
+            <section className="py-20 px-6 bg-[#09090b] border-t border-gray-800/80">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center max-w-2xl mx-auto mb-14">
+                        <p className="text-orange-500 font-bold uppercase tracking-wider text-xs">
+                            FINANCIAL INTELLIGENCE
+                        </p>
+                        <h2 className="text-3xl md:text-5xl font-black mt-2">
+                            Make Informed Financial Decisions
+                        </h2>
+                        <p className="text-gray-400 text-sm mt-3">
+                            Know exactly what your dream bike will cost before stepping into the showroom.
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-8">
+                        {/* EMI Calculator Card */}
+                        <div className="group rounded-3xl border border-gray-800 bg-[#111] p-8 hover:border-orange-500/50 hover:shadow-2xl hover:shadow-orange-500/10 transition-all duration-300 flex flex-col justify-between">
+                            <div>
+                                <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                                    <FaCalculator />
+                                </div>
+                                <span className="text-xs font-bold uppercase tracking-wider text-orange-400">
+                                    Loan & Financing
+                                </span>
+                                <h3 className="text-2xl font-black mt-1">
+                                    Motorcycle EMI Calculator
+                                </h3>
+                                <p className="text-gray-400 text-sm mt-3 leading-relaxed">
+                                    Plan your purchase with accurate monthly EMI calculations, loan tenure adjustment, down payment flexibility, and live interest rates from leading Indian banks (SBI, HDFC, ICICI).
+                                </p>
+                                <ul className="mt-5 space-y-2 text-xs text-gray-400">
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Interactive down payment & interest rate sliders
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Bank loan rate comparisons & yearly amortization
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Salary eligibility & affordability recommendations
+                                    </li>
+                                </ul>
+                            </div>
+                            <Button
+                                primary
+                                onClick={() => go("/emi-calculator")}
+                                className="mt-8 w-full justify-center"
+                            >
+                                <span className="flex items-center justify-center gap-2">
+                                    Launch EMI Calculator
+                                    <FaArrowRight />
+                                </span>
+                            </Button>
+                        </div>
+
+                        {/* Ownership Cost Calculator Card */}
+                        <div className="group rounded-3xl border border-gray-800 bg-[#111] p-8 hover:border-orange-500/50 hover:shadow-2xl hover:shadow-orange-500/10 transition-all duration-300 flex flex-col justify-between">
+                            <div>
+                                <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 text-2xl mb-6 group-hover:scale-110 transition-transform">
+                                    <FaChartLine />
+                                </div>
+                                <span className="text-xs font-bold uppercase tracking-wider text-orange-400">
+                                    Lifetime Planning
+                                </span>
+                                <h3 className="text-2xl font-black mt-1">
+                                    5-Year Cost of Ownership
+                                </h3>
+                                <p className="text-gray-400 text-sm mt-3 leading-relaxed">
+                                    Look beyond sticker price. Understand true lifetime expenses including state road taxes, registration, routine servicing, IDV insurance depreciation, and petrol/EV energy.
+                                </p>
+                                <ul className="mt-5 space-y-2 text-xs text-gray-400">
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Petrol vs Electric vehicle running cost comparison
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Maintenance tiers based on engine displacement
+                                    </li>
+                                    <li className="flex items-center gap-2">
+                                        <FaCheckCircle className="text-orange-500" />
+                                        Estimated residual value after 1 to 5 years
+                                    </li>
+                                </ul>
+                            </div>
+                            <Button
+                                onClick={() => go("/ownership-cost")}
+                                className="mt-8 w-full justify-center bg-white/5 border border-white/10 hover:border-orange-500 hover:text-orange-400"
+                            >
+                                <span className="flex items-center justify-center gap-2">
+                                    Calculate Ownership Cost
+                                    <FaArrowRight />
+                                </span>
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </section>
 

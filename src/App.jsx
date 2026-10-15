@@ -18,6 +18,7 @@ const Compare = lazy(() => import("./pages/Compare"));
 const UserDashboard = lazy(() => import("./pages/UserDashboard"));
 const SmartBikeFinder = lazy(() => import("./pages/SmartBikeFinder"));
 const OwnershipCost = lazy(() => import("./pages/OwnershipCost"));
+const EMICalculator = lazy(() => import("./pages/EMICalculator"));
 const LearningHub = lazy(() => import("./pages/LearningHub"));
 
 const RouteFallback = () => (
@@ -47,9 +48,12 @@ function App() {
           <Route path="/ai-plan" element={<AIPlan />} />
           <Route path="/compare" element={<Compare />} />
 
-          {/* New decision-support features (public) */}
+          {/* New decision-support & financial features (public) */}
           <Route path="/smart-bike-finder" element={<SmartBikeFinder />} />
           <Route path="/ownership-cost" element={<OwnershipCost />} />
+          <Route path="/emi-calculator" element={<EMICalculator />} />
+          <Route path="/emi" element={<EMICalculator />} />
+          <Route path="/calculator" element={<EMICalculator />} />
           <Route path="/learn" element={<LearningHub />} />
 
           {/* Customer / User Panel — authenticated customers only */}

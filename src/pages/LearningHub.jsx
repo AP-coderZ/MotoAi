@@ -16,6 +16,7 @@ import {
     Trophy,
     Clock,
     Sparkles,
+    Calculator,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 
@@ -502,6 +503,7 @@ function ModuleCard({ module, completed, onOpen }) {
 // MODULE READER VIEW
 // =====================================================
 function ModuleReader({ module, onBack, onQuizComplete }) {
+    const navigate = useNavigate();
     const [section, setSection] = useState("learn");
     const colors = COLOR_MAP[module.color] || COLOR_MAP.orange;
     const Icon = module.icon;
@@ -553,6 +555,31 @@ function ModuleReader({ module, onBack, onQuizComplete }) {
                             <p className="text-sm text-zinc-300 leading-7 whitespace-pre-line">{c.text}</p>
                         </div>
                     ))}
+                    {module.id === "ownership-costs" && (
+                        <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
+                            <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                                <Calculator size={16} className="text-orange-400" />
+                                Try Our Interactive Calculators
+                            </h4>
+                            <p className="text-xs text-zinc-400">
+                                Put these concepts into practice using our real-time financial and lifetime ownership tools.
+                            </p>
+                            <div className="grid sm:grid-cols-2 gap-2.5 pt-1">
+                                <button
+                                    onClick={() => navigate("/ownership-cost")}
+                                    className="rounded-xl bg-orange-500 px-4 py-2.5 text-xs font-bold text-black hover:bg-orange-400 transition"
+                                >
+                                    Ownership Cost Calculator →
+                                </button>
+                                <button
+                                    onClick={() => navigate("/emi-calculator")}
+                                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/10 transition"
+                                >
+                                    Loan & EMI Calculator →
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     <button
                         onClick={() => setSection("quiz")}
                         className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-orange-500 hover:bg-orange-600 text-black font-bold text-sm transition"

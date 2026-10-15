@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
     ArrowLeft,
     IndianRupee,
@@ -8,6 +8,7 @@ import {
     Shield,
     Calendar,
     TrendingDown,
+    TrendingUp,
     Info,
     ChevronDown,
     Sparkles,
@@ -15,6 +16,8 @@ import {
     RefreshCw,
     Bike,
     Zap,
+    Calculator,
+    ArrowRight,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 
@@ -26,6 +29,7 @@ const pct = (n) => `${Number(n || 0).toFixed(1)}%`;
 
 const FUEL_PRICE_PETROL = 105;   // ₹/litre (national average)
 const FUEL_PRICE_ELEC   = 8;     // ₹/kWh (home charging)
+const FUEL_PRICE_EV     = FUEL_PRICE_ELEC;
 
 // Insurance as % of ex-showroom price (IDV-based approximation)
 const INSURANCE_RATES = {
@@ -97,22 +101,90 @@ const selectCls = inputCls + " appearance-none";
 // =====================================================
 export default function OwnershipCost() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    // Bikes list from backend for preset selection
+    const [bikesList, setBikesList] = useState([]);
+    const [loadingBikes, setLoadingBikes] = useState(false);
+    const [selectedBikeId, setSelectedBikeId] = useState("");
+    const [selectedBikeName, setSelectedBikeName] = useState(searchParams.get("bike") || "");
 
     const [form, setForm] = useState({
-        exShowroom:    150000,
-        fuelType:      "petrol",
-        mileage:       45,        // km/l for petrol; range km for EV
-        batteryKwh:    0,         // for EV
+        exShowroom:    Number(searchParams.get("price")) || 150000,
+        fuelType:      searchParams.get("category")?.toLowerCase() === "electric" ? "electric" : "petrol",
+        mileage:       Number(searchParams.get("mileage")) || 45,        // km/l for petrol; range km for EV
+        batteryKwh:    3.5,                                              // for EV
         dailyKm:       40,
-        ownership:     3,         // years
+        ownership:     3,                                                // years
         maintenanceTier: "mid",
-        loanPct:       0,         // % financed
-        loanRatePA:    10,        // % p.a.
+        loanPct:       0,                                                // % financed
+        loanRatePA:    10.5,                                             // % p.a.
         loanYears:     3,
         emiDownPct:    20,
     });
 
     const set = useCallback((key, val) => setForm((f) => ({ ...f, [key]: val })), []);
+
+    // Sync from searchParams if they update
+    useEffect(() => {
+        const bikeParam = searchParams.get("bike");
+        const priceParam = Number(searchParams.get("price"));
+        const mileageParam = Number(searchParams.get("mileage"));
+        const categoryParam = searchParams.get("category");
+
+        if (bikeParam) setSelectedBikeName(bikeParam);
+        if (priceParam && priceParam > 0) setForm((f) => ({ ...f, exShowroom: priceParam }));
+        if (mileageParam && mileageParam > 0) setForm((f) => ({ ...f, mileage: mileageParam }));
+        if (categoryParam) {
+            const isCatEV = categoryParam.toLowerCase() === "electric";
+            setForm((f) => ({ ...f, fuelType: isCatEV ? "electric" : "petrol" }));
+        }
+    }, [searchParams]);
+
+    // Fetch motorcycles from API for picker
+    useEffect(() => {
+        let isMounted = true;
+        const fetchBikes = async () => {
+            setLoadingBikes(true);
+            try {
+                const res = await fetch("http://localhost:5000/api/motorcycles?limit=100");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (isMounted && data.motorcycles) {
+                        setBikesList(data.motorcycles);
+                    }
+                }
+            } catch (err) {
+                console.warn("Could not load bikes:", err.message);
+            } finally {
+                if (isMounted) setLoadingBikes(false);
+            }
+        };
+        fetchBikes();
+        return () => { isMounted = false; };
+    }, []);
+
+    // Handle selecting a bike from dropdown
+    const handleBikeSelect = (e) => {
+        const id = e.target.value;
+        setSelectedBikeId(id);
+        if (!id) {
+            setSelectedBikeName("");
+            return;
+        }
+        const b = bikesList.find((item) => String(item._id) === String(id));
+        if (b) {
+            setSelectedBikeName(b.name);
+            const isEvBike = (b.category || "").toLowerCase() === "electric";
+            setForm((f) => ({
+                ...f,
+                exShowroom: Number(b.price) || f.exShowroom,
+                mileage: Number(b.mileage || b.range) || f.mileage,
+                fuelType: isEvBike ? "electric" : "petrol",
+                maintenanceTier: isEvBike ? "ev" : (Number(b.engine) > 350 ? "premium" : Number(b.engine) > 150 ? "mid" : "entry"),
+            }));
+        }
+    };
 
     const isEV = form.fuelType === "electric";
 
@@ -135,16 +207,16 @@ export default function OwnershipCost() {
         if (isEV) {
             const kwh = Number(form.batteryKwh) || 3;
             const rangePerCharge = Number(form.mileage) || 100; // km range
-            const chargesPerYear = annualKm / rangePerCharge;
+            const chargesPerYear = rangePerCharge > 0 ? annualKm / rangePerCharge : 0;
             annualFuel = chargesPerYear * kwh * FUEL_PRICE_ELEC;
         } else {
             const mileage = Number(form.mileage) || 1;
-            const litresPerYear = annualKm / mileage;
+            const litresPerYear = mileage > 0 ? annualKm / mileage : 0;
             annualFuel = litresPerYear * FUEL_PRICE_PETROL;
         }
 
         // Maintenance per year
-        const maintenanceTier = MAINTENANCE_PRESETS[isEV ? "ev" : form.maintenanceTier];
+        const maintenanceTier = MAINTENANCE_PRESETS[isEV ? "ev" : form.maintenanceTier] || MAINTENANCE_PRESETS.mid;
         const annualMaintenance = maintenanceTier.annual;
 
         // Insurance per year (calculated by year for accuracy)
@@ -176,8 +248,6 @@ export default function OwnershipCost() {
         }
 
         // Depreciation (residual value)
-        const depKey = `year${years}`;
-        const totalDepreciationPct = DEPRECIATION[depKey] || DEPRECIATION.year5;
         let cumulativeDep = 1;
         for (let y = 1; y <= years; y++) {
             cumulativeDep *= (1 - (DEPRECIATION[`year${y}`] || 0.10));
@@ -191,7 +261,7 @@ export default function OwnershipCost() {
         const totalOwnershipCost = onRoad + totalFuel + totalInsurance + totalMaintenance + totalLoanInterest;
         const annualTotalCost = totalOwnershipCost / years;
         const monthlyCost = annualTotalCost / 12;
-        const costPerKm = dailyKm > 0 ? (annualTotalCost / annualKm) : 0;
+        const costPerKm = (dailyKm > 0 && annualKm > 0) ? (annualTotalCost / annualKm) : 0;
 
         return {
             ex, onRoad, gst, registration,
@@ -214,7 +284,8 @@ export default function OwnershipCost() {
     ].filter((r) => !r.value.includes("₹0"));
 
     const askMotoMind = () => {
-        const prompt = `I've calculated the ownership cost of a motorcycle with ex-showroom price of ${inr(form.exShowroom)}. Over ${calc.years} years with ${form.dailyKm} km/day, the total cost of ownership comes to approximately ${inr(calc.totalOwnershipCost)} (about ${inr(calc.monthlyCost)}/month). This includes fuel (${inr(calc.totalFuel)}), insurance (${inr(calc.totalInsurance)}), and maintenance (${inr(calc.totalMaintenance)}). Can you help me understand if this is reasonable and suggest ways to reduce these costs?`;
+        const bikeStr = selectedBikeName ? ` for ${selectedBikeName}` : "";
+        const prompt = `I've calculated the ownership cost${bikeStr} with an ex-showroom price of ${inr(form.exShowroom)}. Over ${calc.years} years with ${form.dailyKm} km/day, the total cost of ownership comes to approximately ${inr(calc.totalOwnershipCost)} (about ${inr(calc.monthlyCost)}/month). This includes fuel (${inr(calc.totalFuel)}), insurance (${inr(calc.totalInsurance)}), and maintenance (${inr(calc.totalMaintenance)}). Can you help me understand if this is reasonable and suggest ways to reduce these costs?`;
         navigate("/ai-advisor", { state: { prefill: prompt } });
     };
 
@@ -223,7 +294,7 @@ export default function OwnershipCost() {
     // =====================================================
     return (
         <div className="min-h-screen bg-[#070707] text-white">
-            <Navbar />
+            <Navbar activeTab="calculators" />
             <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10">
 
                 {/* Header */}
@@ -235,15 +306,49 @@ export default function OwnershipCost() {
                         <ArrowLeft size={17} />
                         Back
                     </button>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold mb-4">
-                        <IndianRupee size={13} />
-                        Ownership Cost Calculator
+
+                    {/* Dual Calculator Switch Tabs */}
+                    <div className="mb-6 flex flex-wrap gap-2">
+                        <Link
+                            to="/emi-calculator"
+                            className="inline-flex items-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 px-4 py-2 text-xs font-medium text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                        >
+                            <Calculator size={14} />
+                            EMI Calculator
+                        </Link>
+                        <div className="inline-flex items-center gap-2 rounded-xl bg-orange-500/15 border border-orange-500/30 px-4 py-2 text-xs font-bold text-orange-400 shadow-sm">
+                            <TrendingUp size={14} />
+                            5-Year Ownership Cost
+                        </div>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black">Total Cost of Ownership</h1>
+
+                    <h1 className="text-3xl sm:text-4xl font-black">Total Cost of Ownership Calculator</h1>
                     <p className="text-zinc-400 mt-2 max-w-xl">
                         Understand what a motorcycle really costs over its lifetime — beyond just the sticker price.
-                        All figures are estimates for planning purposes.
+                        Factor in on-road taxes, fuel, regular maintenance, insurance, and depreciation.
                     </p>
+
+                    {/* Active Bike Selection Banner */}
+                    {selectedBikeName && (
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                                <Bike size={18} className="text-orange-400" />
+                                <span className="text-xs font-medium text-zinc-300">
+                                    Calculating ownership costs for:{" "}
+                                    <strong className="font-bold text-white">{selectedBikeName}</strong>
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setSelectedBikeName("");
+                                    setSelectedBikeId("");
+                                }}
+                                className="text-xs font-semibold text-orange-400 underline hover:text-orange-300"
+                            >
+                                Clear Selection
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid lg:grid-cols-[1fr_1.2fr] gap-8">
@@ -251,11 +356,39 @@ export default function OwnershipCost() {
                     {/* LEFT — Input Form */}
                     <div className="space-y-5">
 
+                        {/* Preset Bike Selector */}
+                        <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-3">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                                Select Motorcycle Preset (Optional)
+                            </label>
+                            <div className="relative">
+                                <select
+                                    value={selectedBikeId}
+                                    onChange={handleBikeSelect}
+                                    className="w-full appearance-none rounded-xl border border-white/10 bg-[#0d0d0f] px-4 py-3 text-sm text-white focus:border-orange-500/50 focus:outline-none"
+                                >
+                                    <option value="">-- Choose a bike to auto-fill specs or enter below --</option>
+                                    {bikesList.map((bike) => (
+                                        <option key={bike._id} value={bike._id}>
+                                            {bike.name} ({bike.brand}) — {inr(bike.price)}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown
+                                    size={16}
+                                    className="pointer-events-none absolute right-4 top-3.5 text-zinc-500"
+                                />
+                            </div>
+                            {loadingBikes && (
+                                <p className="text-xs text-zinc-500">Loading bike database...</p>
+                            )}
+                        </div>
+
                         {/* Bike Details */}
                         <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
                             <h3 className="font-black text-base">Motorcycle Details</h3>
 
-                            <Field label="Ex-showroom Price (₹)" hint="Price before GST, registration, and insurance">
+                            <Field label="Ex-showroom Price (₹)" hint="Base price before GST, registration, and insurance">
                                 <input
                                     id="ex-showroom-price"
                                     type="number"
@@ -304,7 +437,7 @@ export default function OwnershipCost() {
                                     </Field>
                                 </>
                             ) : (
-                                <Field label="Fuel Efficiency (km/l)" hint="Real-world, not claimed mileage">
+                                <Field label="Fuel Efficiency (km/l)" hint="Real-world average mileage">
                                     <input
                                         id="mileage"
                                         type="number"
@@ -363,9 +496,18 @@ export default function OwnershipCost() {
                             )}
                         </div>
 
-                        {/* Loan */}
+                        {/* Loan / Financing */}
                         <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5 space-y-4">
-                            <h3 className="font-black text-base">Financing (Optional)</h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-black text-base">Financing (Optional Loan)</h3>
+                                <Link
+                                    to={`/emi-calculator?price=${form.exShowroom}${selectedBikeName ? `&bike=${encodeURIComponent(selectedBikeName)}` : ""}`}
+                                    className="text-xs font-bold text-orange-400 hover:underline flex items-center gap-1"
+                                >
+                                    Full EMI Calculator
+                                    <ArrowRight size={12} />
+                                </Link>
+                            </div>
 
                             <Field label="Loan Amount (% of on-road)" hint="Set to 0 for full cash purchase">
                                 <input
@@ -379,7 +521,7 @@ export default function OwnershipCost() {
                                 />
                             </Field>
 
-                            {form.loanPct > 0 && (
+                            {Number(form.loanPct) > 0 && (
                                 <>
                                     <Field label="Interest Rate (% p.a.)">
                                         <input
@@ -413,7 +555,7 @@ export default function OwnershipCost() {
                             <span>
                                 All figures are estimates. Petrol price assumed ₹{FUEL_PRICE_PETROL}/litre.
                                 Electricity assumed ₹{FUEL_PRICE_EV}/kWh. Insurance uses IDV-based approximation.
-                                Actual costs may vary.
+                                Actual costs may vary depending on state road taxes and personal driving conditions.
                             </span>
                         </div>
                     </div>
@@ -427,12 +569,12 @@ export default function OwnershipCost() {
                                 icon={<IndianRupee size={18} />}
                                 label={`Total ${calc.years}yr Cost`}
                                 value={inr(calc.totalOwnershipCost)}
-                                sub="Including all costs"
+                                sub="Including purchase & running"
                                 accent
                             />
                             <CostCard
                                 icon={<Calendar size={18} />}
-                                label="Monthly Cost"
+                                label="Monthly Outflow"
                                 value={inr(calc.monthlyCost)}
                                 sub="Average per month"
                             />
@@ -440,25 +582,33 @@ export default function OwnershipCost() {
                                 icon={<Bike size={18} />}
                                 label="Cost Per Km"
                                 value={calc.costPerKm > 0 ? `₹${calc.costPerKm.toFixed(2)}` : "—"}
-                                sub="All-inclusive"
+                                sub="All-inclusive expense"
                             />
                             <CostCard
                                 icon={<TrendingDown size={18} />}
                                 label="Residual Value"
                                 value={inr(calc.residualValue)}
-                                sub={`After ${calc.years} yr`}
+                                sub={`After ${calc.years} yr depreciation`}
                             />
                         </div>
 
-                        {/* EMI */}
-                        {form.loanPct > 0 && calc.monthlyEmi > 0 && (
+                        {/* Loan EMI highlight if enabled */}
+                        {Number(form.loanPct) > 0 && calc.monthlyEmi > 0 && (
                             <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
-                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wide mb-3">Loan EMI</p>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs text-indigo-400 font-bold uppercase tracking-wide">Financed Loan EMI</p>
+                                    <Link
+                                        to={`/emi-calculator?price=${form.exShowroom}&tenure=${form.loanYears}&rate=${form.loanRatePA}`}
+                                        className="text-[11px] font-semibold text-indigo-300 hover:underline"
+                                    >
+                                        Detailed Amortization →
+                                    </Link>
+                                </div>
                                 <div className="flex items-baseline gap-2">
                                     <p className="text-3xl font-black">{inr(calc.monthlyEmi)}</p>
                                     <span className="text-sm text-zinc-500">/month</span>
                                 </div>
-                                <p className="text-xs text-zinc-500 mt-1">
+                                <p className="text-xs text-zinc-400 mt-1">
                                     Total interest paid: {inr(calc.totalLoanInterest)} over {form.loanYears} years
                                 </p>
                             </div>
@@ -466,7 +616,7 @@ export default function OwnershipCost() {
 
                         {/* Breakdown */}
                         <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-5">
-                            <h3 className="font-black text-base mb-4">Cost Breakdown</h3>
+                            <h3 className="font-black text-base mb-4">Cost Breakdown (Lifetime)</h3>
                             <div className="space-y-3">
                                 {breakdown.map((item) => (
                                     <div key={item.label}>
@@ -507,30 +657,44 @@ export default function OwnershipCost() {
                                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
                                     <p className="text-xs text-zinc-500 mb-1">Maintenance</p>
                                     <p className="font-black">{inr(calc.annualMaintenance)}</p>
-                                    <p className="text-xs text-zinc-600">Service + parts</p>
+                                    <p className="text-xs text-zinc-600">Service + regular parts</p>
                                 </div>
                                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
                                     <p className="text-xs text-zinc-500 mb-1">Total Annual</p>
                                     <p className="font-black">{inr(calc.annualTotalCost)}</p>
-                                    <p className="text-xs text-zinc-600">All costs combined</p>
+                                    <p className="text-xs text-zinc-600">Running expense / year</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Ask MotoMind */}
                         <button
+                            type="button"
                             onClick={askMotoMind}
                             className="w-full flex items-center justify-center gap-2.5 py-4 rounded-2xl bg-orange-500 hover:bg-orange-600 text-black font-bold text-sm transition shadow-lg shadow-orange-500/20"
                         >
                             <Sparkles size={18} />
-                            Ask MotoMind to Analyse This
+                            Ask MotoMind to Analyse This Ownership Plan
                         </button>
+
+                        {/* Switch to EMI Calculator link */}
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-white">Compare bank interest rates?</p>
+                                <p className="text-[11px] text-zinc-400">View SBI, HDFC, ICICI rates & custom amortization.</p>
+                            </div>
+                            <Link
+                                to={`/emi-calculator?price=${form.exShowroom}${selectedBikeName ? `&bike=${encodeURIComponent(selectedBikeName)}` : ""}`}
+                                className="flex items-center gap-1 rounded-xl bg-white/5 px-3 py-2 text-xs font-bold text-orange-400 hover:bg-orange-500/10 transition shrink-0"
+                            >
+                                EMI Calculator
+                                <ArrowRight size={13} />
+                            </Link>
+                        </div>
+
                     </div>
                 </div>
             </div>
         </div>
     );
 }
-
-// Make fuel price constant available in JSX
-const FUEL_PRICE_EV = FUEL_PRICE_ELEC;
